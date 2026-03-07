@@ -1,85 +1,52 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>管理者 - 画面共有</title>
+    <title>管理者 - 画面共有開始</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        video { width: 100%; border-radius: 8px; background: #000; margin-top: 15px; }
-        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #0056b3; }
-        .status { color: #666; font-size: 14px; margin-top: 10px; }
+        body { font-family: sans-serif; text-align: center; background: #f0f2f5; }
+        video { width: 80%; border: 2px solid #333; border-radius: 8px; margin-top: 20px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>管理者用 配信パネル</h1>
-        <button id="startBtn">画面共有を開始する</button>
-        <div class="status" id="statusText">停止中</div>
-        <video id="localVideo" autoplay playsinline muted></video>
-    </div>
+    <h1>管理者画面</h1>
+    <button id="startBtn">画面共有するタブを選択</button>
+    <br>
+    <video id="localVideo" autoplay playsinline muted></video>
 
     <script>
-// admin.html の script 部分を差し替え
-const socket = io({ transports: ['websocket'] });
-let peerConnection;
-let localStream;
-const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const socket = io();
+        const startBtn = document.getElementById('startBtn');
+        const localVideo = document.getElementById('localVideo');
+        let peerConnection;
 
-startBtn.onclick = async () => {
-    try {
-        // 音声も含めて取得（必要なければaudio:false）
-        localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        localVideo.srcObject = localStream;
-        statusText.innerText = "配信中...";
-        
-        // 配信開始
-        createPeerConnection();
-    } catch (err) {
-        console.error("共有に失敗:", err);
-    }
-};
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-function createPeerConnection() {
-    if (peerConnection) peerConnection.close();
-    
-    peerConnection = new RTCPeerConnection(config);
+        startBtn.onclick = async () => {
+            // タブ選択ダイアログを表示
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            localVideo.srcObject = stream;
 
-    // 映像・音声トラックを追加
-    localStream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, localStream);
-    });
+            peerConnection = new RTCPeerConnection(config);
+            stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
 
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            socket.emit('candidate', event.candidate);
-        }
-    };
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) socket.emit('candidate', event.candidate);
+            };
 
-    // Offer（接続提案）を作成
-    peerConnection.createOffer()
-        .then(offer => peerConnection.setLocalDescription(offer))
-        .then(() => {
-            socket.emit('offer', peerConnection.localDescription);
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit('offer', offer);
+        };
+
+        socket.on('answer', async (answer) => {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
         });
-}
 
-// 閲覧者が新しく来たら作り直す
-socket.on('viewer-joined', () => {
-    if (localStream) createPeerConnection();
-});
-
-socket.on('answer', async (answer) => {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-});
-
-socket.on('candidate', async (candidate) => {
-    try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) { console.error(e); }
-});
+        socket.on('candidate', async (candidate) => {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        });
     </script>
 </body>
 </html>
