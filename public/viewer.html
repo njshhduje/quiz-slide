@@ -1,93 +1,45 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>閲覧者 - ライブ視聴</title>
+    <title>閲覧者 - 画面視聴</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-        
-        /* 待機中の表示 */
-        #waiting-layer {
-            text-align: center;
-            color: white;
-            font-family: sans-serif;
-            transition: opacity 0.5s;
-        }
-        .spinner {
-            width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-top: 5px solid #fff;
-            border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* ビデオの表示（最初は隠す） */
-        video {
-            display: none;
-            width: 100vw;
-            height: 100vh;
-            object-fit: contain; /* 比率を保って最大化 */
-        }
-
-        /* 配信が始まった時の切り替え */
-        .is-playing #waiting-layer { display: none; }
-        .is-playing video { display: block; }
+        body { font-family: sans-serif; text-align: center; background: #111; color: white; }
+        video { width: 90%; max-height: 80vh; border: 1px solid #444; }
     </style>
 </head>
 <body>
-
-    <div id="waiting-layer">
-        <div class="spinner"></div>
-        <h2>📡 待機中...</h2>
-        <p>管理者が共有を開始するまでお待ちください</p>
-    </div>
-
+    <h1>閲覧中...</h1>
     <video id="remoteVideo" autoplay playsinline></video>
 
     <script>
-// viewer.html の script 部分を差し替え
-const socket = io({ transports: ['websocket'] });
-const remoteVideo = document.getElementById('remoteVideo');
-let peerConnection;
-const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const socket = io();
+        const remoteVideo = document.getElementById('remoteVideo');
+        let peerConnection;
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-socket.emit('join-viewer');
-
-socket.on('offer', async (offer) => {
-    if (peerConnection) peerConnection.close();
-    
-    peerConnection = new RTCPeerConnection(config);
-
-    // トラックを受信した時の処理を強化
-    peerConnection.ontrack = (event) => {
-        console.log("映像を受信しました");
-        if (remoteVideo.srcObject !== event.streams[0]) {
-            remoteVideo.srcObject = event.streams[0];
+        socket.on('offer', async (offer) => {
+            peerConnection = new RTCPeerConnection(config);
             
-            // 確実に再生を開始
-            remoteVideo.play().catch(e => console.error("再生失敗:", e));
-            document.body.classList.add('is-playing');
-        }
-    };
+            peerConnection.ontrack = (event) => {
+                remoteVideo.srcObject = event.streams[0];
+            };
 
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            socket.emit('candidate', event.candidate);
-        }
-    };
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) socket.emit('candidate', event.candidate);
+            };
 
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit('answer', peerConnection.localDescription);
-});
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            socket.emit('answer', answer);
+        });
 
-socket.on('candidate', async (candidate) => {
-    try {
-        if (peerConnection) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-    } catch (e) { console.error(e); }
-});
+        socket.on('candidate', async (candidate) => {
+            if (peerConnection) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+        });
     </script>
 </body>
 </html>
