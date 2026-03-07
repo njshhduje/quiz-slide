@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>閲覧者 - 画面視聴</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #111; color: white; }
+        video { width: 90%; max-height: 80vh; border: 1px solid #444; }
+    </style>
+</head>
+<body>
+    <h1>閲覧中...</h1>
+    <video id="remoteVideo" autoplay playsinline></video>
+
+    <script>
+        const socket = io();
+        const remoteVideo = document.getElementById('remoteVideo');
+        let peerConnection;
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        socket.on('offer', async (offer) => {
+            peerConnection = new RTCPeerConnection(config);
+            
+            peerConnection.ontrack = (event) => {
+                remoteVideo.srcObject = event.streams[0];
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) socket.emit('candidate', event.candidate);
+            };
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            socket.emit('answer', answer);
+        });
+
+        socket.on('candidate', async (candidate) => {
+            if (peerConnection) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+        });
+    </script>
+</body>
+</html>
