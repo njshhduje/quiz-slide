@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>管理者 - 画面共有開始</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f2f5; }
+        video { width: 80%; border: 2px solid #333; border-radius: 8px; margin-top: 20px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>管理者画面</h1>
+    <button id="startBtn">画面共有するタブを選択</button>
+    <br>
+    <video id="localVideo" autoplay playsinline muted></video>
+
+    <script>
+        const socket = io();
+        const startBtn = document.getElementById('startBtn');
+        const localVideo = document.getElementById('localVideo');
+        let peerConnection;
+
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        startBtn.onclick = async () => {
+            // タブ選択ダイアログを表示
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            localVideo.srcObject = stream;
+
+            peerConnection = new RTCPeerConnection(config);
+            stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) socket.emit('candidate', event.candidate);
+            };
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit('offer', offer);
+        };
+
+        socket.on('answer', async (answer) => {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        });
+
+        socket.on('candidate', async (candidate) => {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        });
+    </script>
+</body>
+</html>
