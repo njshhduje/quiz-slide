@@ -22,7 +22,10 @@
     </div>
 
     <script>
-        const socket = io();
+        const socket = io({
+  transports: ['websocket'],
+  upgrade: false
+});
         const startBtn = document.getElementById('startBtn');
         const localVideo = document.getElementById('localVideo');
         const statusText = document.getElementById('statusText');
