@@ -1,7 +1,6 @@
 {
-  "name": "render-screen-share",
+  "name": "simple-screen-share",
   "version": "1.0.0",
-  "description": "Simple screen sharing app",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
