@@ -1,32 +1,29 @@
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
-
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
+const path = require('path');
 
 app.use(express.static('public'));
 
-// 状態管理（現在のページと表示フラグ）
-let state = {
-    currentPage: 0,
-    isVisible: true
-};
-
 io.on('connection', (socket) => {
-    // 接続時に現在の状態を送信
-    socket.emit('init', state);
+    // 管理者からの映像信号(Offer)を閲覧者に送る
+    socket.on('offer', (data) => {
+        socket.broadcast.emit('offer', data);
+    });
 
-    // 管理者からの操作を受信して全員に転送
-    socket.on('admin-control', (data) => {
-        state = { ...state, ...data };
-        socket.broadcast.emit('update', state);
+    // 閲覧者からの応答(Answer)を管理者に送る
+    socket.on('answer', (data) => {
+        socket.broadcast.emit('answer', data);
+    });
+
+    // ネットワーク経路情報(ICE Candidate)の交換
+    socket.on('candidate', (data) => {
+        socket.broadcast.emit('candidate', data);
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+http.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
