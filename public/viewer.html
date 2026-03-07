@@ -1,28 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <title>閲覧者 - 画面視聴</title>
+    <meta charset="UTF-8">
+    <title>Viewer</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #111; color: white; }
-        video { width: 90%; max-height: 80vh; border: 1px solid #444; }
+        /* 背景を黒にして、余計な余白をゼロにする */
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            background: #000; overflow: hidden; 
+            display: flex; justify-content: center; align-items: center; 
+        }
+        /* ビデオは最初非表示。映像が来たら画面いっぱいに */
+        video { 
+            display: none; width: 100vw; height: 100vh; object-fit: contain; 
+        }
+        /* 映像が再生されたら表示する */
+        .is-playing video { display: block; }
     </style>
 </head>
 <body>
-    <h1>閲覧中...</h1>
-    <video id="remoteVideo" autoplay playsinline></video>
+    <video id="remoteVideo" autoplay playsinline muted></video>
 
     <script>
-        const socket = io();
+        const socket = io({ transports: ['websocket'] });
         const remoteVideo = document.getElementById('remoteVideo');
         let peerConnection;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
+        socket.emit('join-viewer');
+
         socket.on('offer', async (offer) => {
+            if (peerConnection) peerConnection.close();
             peerConnection = new RTCPeerConnection(config);
-            
+
             peerConnection.ontrack = (event) => {
                 remoteVideo.srcObject = event.streams[0];
+                remoteVideo.play();
+                document.body.classList.add('is-playing');
             };
 
             peerConnection.onicecandidate = (event) => {
@@ -32,13 +47,11 @@
             await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
-            socket.emit('answer', answer);
+            socket.emit('answer', peerConnection.localDescription);
         });
 
         socket.on('candidate', async (candidate) => {
-            if (peerConnection) {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            }
+            if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
         });
     </script>
 </body>
