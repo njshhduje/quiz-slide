@@ -2,53 +2,43 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>閲覧者 - ライブ配信</title>
+    <title>閲覧者 - ライブ視聴</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* 画面全体を黒背景にし、余計な隙間をなくす */
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-            font-family: sans-serif;
-        }
-
-        /* 待機中のメッセージスタイル */
-        #status-message {
-            color: white;
-            font-size: 1.5rem;
-            z-index: 10;
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        
+        /* 待機中の表示 */
+        #waiting-layer {
             text-align: center;
+            color: white;
+            font-family: sans-serif;
+            transition: opacity 0.5s;
         }
+        .spinner {
+            width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-top: 5px solid #fff;
+            border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* ビデオのスタイル：最初は非表示 */
+        /* ビデオの表示（最初は隠す） */
         video {
             display: none;
             width: 100vw;
             height: 100vh;
-            object-fit: contain; /* アスペクト比を維持して最大化 */
+            object-fit: contain; /* 比率を保って最大化 */
         }
 
-        /* 映像があるとき用のクラス */
-        .playing video {
-            display: block;
-        }
-        .playing #status-message {
-            display: none;
-        }
+        /* 配信が始まった時の切り替え */
+        .is-playing #waiting-layer { display: none; }
+        .is-playing video { display: block; }
     </style>
 </head>
 <body>
 
-    <div id="status-message">
-        <p>📡 配信を待機しています...</p>
-        <p style="font-size: 0.9rem; color: #aaa;">管理者が共有を開始すると自動的に表示されます</p>
+    <div id="waiting-layer">
+        <div class="spinner"></div>
+        <h2>📡 待機中...</h2>
+        <p>管理者が共有を開始するまでお待ちください</p>
     </div>
 
     <video id="remoteVideo" autoplay playsinline></video>
@@ -56,23 +46,20 @@
     <script>
         const socket = io();
         const remoteVideo = document.getElementById('remoteVideo');
-        const statusMessage = document.getElementById('status-message');
         let peerConnection;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-        // 参加したことをサーバー経由で管理者に通知
+        // 入室を通知（管理者にOfferを催促する）
         socket.emit('join-viewer');
 
         socket.on('offer', async (offer) => {
             peerConnection = new RTCPeerConnection(config);
             
             peerConnection.ontrack = (event) => {
-                // 映像ストリームを受け取った時の処理
                 remoteVideo.srcObject = event.streams[0];
-                
-                // 映像が流れ始めたら表示を切り替え
+                // 映像が届いたら「is-playing」クラスを付与
                 remoteVideo.onloadedmetadata = () => {
-                    document.body.classList.add('playing');
+                    document.body.classList.add('is-playing');
                 };
             };
 
@@ -92,9 +79,9 @@
             }
         });
 
-        // 接続が切れた場合の処理
+        // 配信が止まった場合
         socket.on('disconnect', () => {
-            document.body.classList.remove('playing');
+            document.body.classList.remove('is-playing');
         });
     </script>
 </body>
