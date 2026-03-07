@@ -2,12 +2,11 @@ const socket = io();
 let currentRole = 'viewer';
 let currentState = { currentPage: 0, isVisible: true };
 
-// スライドのベースURL（ご提示いただいたIDを使用）
-const SLIDE_ID = "2PACX-1vSpub-fOzG-SkXTwVkrR4JidqMnhW5XCBZDhzHrzKG-v8VES0YAYdYgAh-n14fzug4klVsy8l5e1QaT";
-const BASE_URL = `https://docs.google.com/presentation/d/e/${SLIDE_ID}/pubembed`;
+// 提供されたベースURL
+const SLIDE_URL = "https://docs.google.com/presentation/d/e/2PACX-1vSpub-fOzG-SkXTwVkrR4JidqMnhW5XCBZDhzHrzKG-v8VES0YAYdYgAh-n14fzug4klVsy8l5e1QaT/pubembed";
 
-// スライドの枚数（スライドに合わせて調整してください）
-const TOTAL_PAGES = 10; 
+// スライドの総枚数（実際のスライド枚数に合わせて書き換えてください）
+const TOTAL_PAGES = 15; 
 
 function setRole(role) {
     currentRole = role;
@@ -19,8 +18,10 @@ function setRole(role) {
     initThumbnails();
 }
 
+// 左側のスライド一覧を生成
 function initThumbnails() {
     const list = document.getElementById('thumbnail-list');
+    list.innerHTML = ''; // 初期化
     for (let i = 0; i < TOTAL_PAGES; i++) {
         const div = document.createElement('div');
         div.className = 'thumb';
@@ -37,18 +38,34 @@ socket.on('sync', (state) => {
     const frame = document.getElementById('slide-frame');
     const overlay = document.getElementById('black-out');
 
-    // スライドのURLを更新（&slide= パラメータでページ指定）
-    frame.src = `${BASE_URL}?start=false&loop=false&delayms=2000&slide=${state.currentPage}`;
+    // Googleスライドのページ切り替えURLを生成
+    // ブラウザのキャッシュ対策として t= (タイムスタンプ) を付与
+    const timestamp = new Date().getTime();
+    const newSrc = `${SLIDE_URL}?start=false&loop=false&delayms=3000&slide=${state.currentPage}&t=${timestamp}`;
+    
+    // 現在のURLと異なる場合のみ更新（チラつき防止）
+    if (frame.src !== newSrc) {
+        frame.src = newSrc;
+    }
     
     // 表示・非表示の切り替え
-    state.isVisible ? overlay.classList.add('hidden') : overlay.classList.remove('hidden');
+    if (state.isVisible) {
+        overlay.classList.add('hidden');
+    } else {
+        overlay.classList.remove('hidden');
+    }
 
     // サイドバーのハイライト更新
     document.querySelectorAll('.thumb').forEach(el => el.classList.remove('active'));
-    document.getElementById(`thumb-${state.currentPage}`)?.classList.add('active');
+    const activeThumb = document.getElementById(`thumb-${state.currentPage}`);
+    if (activeThumb) {
+        activeThumb.classList.add('active');
+        // アクティブなスライドまでサイドバーを自動スクロール
+        activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 });
 
-// 管理者用：状態更新関数
+// 管理者用：状態更新をサーバーへ送信
 function updateState(newData) {
     socket.emit('admin-action', newData);
 }
