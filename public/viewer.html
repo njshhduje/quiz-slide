@@ -44,48 +44,50 @@
     <video id="remoteVideo" autoplay playsinline></video>
 
     <script>
-        const socket = io({
-  transports: ['websocket'],
-  upgrade: false
-});
-        const remoteVideo = document.getElementById('remoteVideo');
-        let peerConnection;
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+// viewer.html の script 部分を差し替え
+const socket = io({ transports: ['websocket'] });
+const remoteVideo = document.getElementById('remoteVideo');
+let peerConnection;
+const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-        // 入室を通知（管理者にOfferを催促する）
-        socket.emit('join-viewer');
+socket.emit('join-viewer');
 
-        socket.on('offer', async (offer) => {
-            peerConnection = new RTCPeerConnection(config);
+socket.on('offer', async (offer) => {
+    if (peerConnection) peerConnection.close();
+    
+    peerConnection = new RTCPeerConnection(config);
+
+    // トラックを受信した時の処理を強化
+    peerConnection.ontrack = (event) => {
+        console.log("映像を受信しました");
+        if (remoteVideo.srcObject !== event.streams[0]) {
+            remoteVideo.srcObject = event.streams[0];
             
-            peerConnection.ontrack = (event) => {
-                remoteVideo.srcObject = event.streams[0];
-                // 映像が届いたら「is-playing」クラスを付与
-                remoteVideo.onloadedmetadata = () => {
-                    document.body.classList.add('is-playing');
-                };
-            };
+            // 確実に再生を開始
+            remoteVideo.play().catch(e => console.error("再生失敗:", e));
+            document.body.classList.add('is-playing');
+        }
+    };
 
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) socket.emit('candidate', event.candidate);
-            };
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit('candidate', event.candidate);
+        }
+    };
 
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            socket.emit('answer', answer);
-        });
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit('answer', peerConnection.localDescription);
+});
 
-        socket.on('candidate', async (candidate) => {
-            if (peerConnection) {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            }
-        });
-
-        // 配信が止まった場合
-        socket.on('disconnect', () => {
-            document.body.classList.remove('is-playing');
-        });
+socket.on('candidate', async (candidate) => {
+    try {
+        if (peerConnection) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+    } catch (e) { console.error(e); }
+});
     </script>
 </body>
 </html>
