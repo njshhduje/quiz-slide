@@ -22,58 +22,64 @@
     </div>
 
     <script>
-        const socket = io({
-  transports: ['websocket'],
-  upgrade: false
-});
-        const startBtn = document.getElementById('startBtn');
-        const localVideo = document.getElementById('localVideo');
-        const statusText = document.getElementById('statusText');
+// admin.html の script 部分を差し替え
+const socket = io({ transports: ['websocket'] });
+let peerConnection;
+let localStream;
+const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+startBtn.onclick = async () => {
+    try {
+        // 音声も含めて取得（必要なければaudio:false）
+        localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        localVideo.srcObject = localStream;
+        statusText.innerText = "配信中...";
         
-        let peerConnection;
-        let localStream;
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        // 配信開始
+        createPeerConnection();
+    } catch (err) {
+        console.error("共有に失敗:", err);
+    }
+};
 
-        // 共有開始ボタン
-        startBtn.onclick = async () => {
-            try {
-                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-                localVideo.srcObject = localStream;
-                statusText.innerText = "配信中...";
-                startBroadcasting();
-            } catch (err) {
-                console.error("Error: " + err);
-            }
-        };
+function createPeerConnection() {
+    if (peerConnection) peerConnection.close();
+    
+    peerConnection = new RTCPeerConnection(config);
 
-        async function startBroadcasting() {
-            peerConnection = new RTCPeerConnection(config);
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    // 映像・音声トラックを追加
+    localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+    });
 
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) socket.emit('candidate', event.candidate);
-            };
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socket.emit('offer', offer);
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit('candidate', event.candidate);
         }
+    };
 
-        // 閲覧者が新しく入ってきたら、再度Offerを送ってあげる
-        socket.on('viewer-joined', () => {
-            if (localStream) {
-                console.log("新しい閲覧者のために再接続を開始します");
-                startBroadcasting();
-            }
+    // Offer（接続提案）を作成
+    peerConnection.createOffer()
+        .then(offer => peerConnection.setLocalDescription(offer))
+        .then(() => {
+            socket.emit('offer', peerConnection.localDescription);
         });
+}
 
-        socket.on('answer', async (answer) => {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        });
+// 閲覧者が新しく来たら作り直す
+socket.on('viewer-joined', () => {
+    if (localStream) createPeerConnection();
+});
 
-        socket.on('candidate', async (candidate) => {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        });
+socket.on('answer', async (answer) => {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+socket.on('candidate', async (candidate) => {
+    try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) { console.error(e); }
+});
     </script>
 </body>
 </html>
