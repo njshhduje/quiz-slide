@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Slide Sync System</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div id="setup">
+        <button onclick="start('viewer')">閲覧者として参加</button>
+        <button onclick="start('admin')">管理者として参加</button>
+    </div>
+
+    <div id="app" style="display:none;">
+        <div id="sidebar">
+            <h3>スライド一覧</h3>
+            <div id="slide-list">
+                </div>
+        </div>
+        <div id="main">
+            <div id="overlay" class="hidden">準備中...</div>
+            <iframe id="slide-frame" src="" frameborder="0" allowfullscreen="true"></iframe>
+            <div id="controls" class="admin-only">
+                <button onclick="prev()">前へ</button>
+                <button onclick="toggle()">表示/非表示</button>
+                <button onclick="next()">次へ</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
