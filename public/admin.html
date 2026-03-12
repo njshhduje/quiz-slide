@@ -2,31 +2,34 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Admin - Slide Control</title>
+    <title>Admin - Slide Controller</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #222; color: white; }
-        .toolbar { padding: 10px; background: #333; display: flex; gap: 10px; align-items: center; }
-        input { flex: 1; padding: 8px; border-radius: 4px; border: none; }
-        button { padding: 8px 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
+        .toolbar { padding: 10px; background: #333; display: flex; gap: 10px; align-items: center; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        input { flex: 1; padding: 10px; border-radius: 4px; border: none; font-size: 14px; }
+        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #0056b3; }
         
-        /* スライドを表示するエリア */
-        #container { flex: 1; position: relative; background: #000; overflow: hidden; }
-        iframe { width: 100%; height: 100%; border: none; }
+        #container { flex: 1; position: relative; background: #000; }
+        /* スライドの表示エリア */
+        #slideFrame { width: 100%; height: 100%; border: none; }
         
-        /* プレビュー用の小さいビデオ（配信確認用） */
-        #localVideo { position: absolute; bottom: 10px; right: 10px; width: 200px; border: 2px solid #555; pointer-events: none; }
+        /* 配信確認用の小窓 */
+        #localVideo { position: absolute; bottom: 20px; right: 20px; width: 240px; border: 2px solid #007bff; border-radius: 8px; pointer-events: none; background: #000; }
+        .hint { font-size: 12px; color: #ccc; margin-left: 10px; }
     </style>
 </head>
 <body>
     <div class="toolbar">
-        <input type="text" id="urlInput" placeholder="GoogleスライドのURLを貼ってください">
-        <button id="loadBtn">スライドを読み込む</button>
-        <button id="startBtn" style="background: #28a745;">この画面を共有開始</button>
+        <input type="text" id="urlInput" placeholder="GoogleスライドのURL（編集用URLでOK）を貼り付け">
+        <button id="loadBtn">スライド表示</button>
+        <button id="startBtn" style="background: #28a745;">配信開始（このタブを選択）</button>
+        <span class="hint">※スライド内をクリックするとキーボードで操作できます</span>
     </div>
 
     <div id="container">
-        <iframe id="slideFrame" src="about:blank"></iframe>
+        <iframe id="slideFrame" src="about:blank" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
         <video id="localVideo" autoplay playsinline muted></video>
     </div>
 
@@ -35,32 +38,31 @@
         const slideFrame = document.getElementById('slideFrame');
         const urlInput = document.getElementById('urlInput');
         const localVideo = document.getElementById('localVideo');
-        
         let stream, pc;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-        // 1. URLを読み込んでiframeに表示（ここで直接操作できます）
+        // URLを埋め込み用に変換して読み込む
         document.getElementById('loadBtn').onclick = () => {
             let url = urlInput.value;
-            if (url.includes('docs.google.com')) {
-                // スライドを編集モードではなくプレゼンモード等で表示しやすく調整
-                slideFrame.src = url;
+            if (url.includes('docs.google.com/presentation')) {
+                // /edit や /pub などを /embed に置換してスライドショー形式にする
+                let baseUrl = url.split('/edit')[0].split('/pub')[0].split('/present')[0];
+                slideFrame.src = baseUrl + '/embed?start=false&loop=false&delayms=3000';
             } else {
-                alert("有効なGoogleスライドのURLを入力してください");
+                alert("GoogleスライドのURLを入力してください");
             }
         };
 
-        // 2. 配信開始
         document.getElementById('startBtn').onclick = async () => {
             try {
-                // 「このタブ」を選択してください
-                stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                // 共有開始（「ブラウザのタブ」から、このAdminタブを選択してください）
+                stream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { cursor: "always" }, 
+                    audio: true 
+                });
                 localVideo.srcObject = stream;
                 sendOffer();
-                alert("共有設定完了！「このタブ」を選択した状態で操作してください。");
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         };
 
         async function sendOffer() {
