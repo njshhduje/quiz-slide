@@ -1,10 +1,16 @@
 const express = require('express');
+const path = require('path'); // 追加
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
-// staticファイル（HTMLなど）をpublicフォルダから読み込む設定
-app.use(express.static('public'));
+// path.joinを使って絶対パスで指定する（403回避に有効）
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ルートにアクセスした時にadminへ飛ばす設定（任意）
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
 io.on('connection', (socket) => {
     socket.on('join-viewer', () => socket.broadcast.emit('viewer-joined'));
