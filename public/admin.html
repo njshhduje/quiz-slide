@@ -1,52 +1,81 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <title>管理者 - 画面共有開始</title>
+    <meta charset="UTF-8">
+    <title>Admin - Slide Control</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f0f2f5; }
-        video { width: 80%; border: 2px solid #333; border-radius: 8px; margin-top: 20px; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #222; color: white; }
+        .toolbar { padding: 10px; background: #333; display: flex; gap: 10px; align-items: center; }
+        input { flex: 1; padding: 8px; border-radius: 4px; border: none; }
+        button { padding: 8px 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        
+        /* スライドを表示するエリア */
+        #container { flex: 1; position: relative; background: #000; overflow: hidden; }
+        iframe { width: 100%; height: 100%; border: none; }
+        
+        /* プレビュー用の小さいビデオ（配信確認用） */
+        #localVideo { position: absolute; bottom: 10px; right: 10px; width: 200px; border: 2px solid #555; pointer-events: none; }
     </style>
 </head>
 <body>
-    <h1>管理者画面</h1>
-    <button id="startBtn">画面共有するタブを選択</button>
-    <br>
-    <video id="localVideo" autoplay playsinline muted></video>
+    <div class="toolbar">
+        <input type="text" id="urlInput" placeholder="GoogleスライドのURLを貼ってください">
+        <button id="loadBtn">スライドを読み込む</button>
+        <button id="startBtn" style="background: #28a745;">この画面を共有開始</button>
+    </div>
+
+    <div id="container">
+        <iframe id="slideFrame" src="about:blank"></iframe>
+        <video id="localVideo" autoplay playsinline muted></video>
+    </div>
 
     <script>
-        const socket = io();
-        const startBtn = document.getElementById('startBtn');
+        const socket = io({ transports: ['websocket'] });
+        const slideFrame = document.getElementById('slideFrame');
+        const urlInput = document.getElementById('urlInput');
         const localVideo = document.getElementById('localVideo');
-        let peerConnection;
-
+        
+        let stream, pc;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-        startBtn.onclick = async () => {
-            // タブ選択ダイアログを表示
-            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-            localVideo.srcObject = stream;
-
-            peerConnection = new RTCPeerConnection(config);
-            stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
-
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) socket.emit('candidate', event.candidate);
-            };
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socket.emit('offer', offer);
+        // 1. URLを読み込んでiframeに表示（ここで直接操作できます）
+        document.getElementById('loadBtn').onclick = () => {
+            let url = urlInput.value;
+            if (url.includes('docs.google.com')) {
+                // スライドを編集モードではなくプレゼンモード等で表示しやすく調整
+                slideFrame.src = url;
+            } else {
+                alert("有効なGoogleスライドのURLを入力してください");
+            }
         };
 
-        socket.on('answer', async (answer) => {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        });
+        // 2. 配信開始
+        document.getElementById('startBtn').onclick = async () => {
+            try {
+                // 「このタブ」を選択してください
+                stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                localVideo.srcObject = stream;
+                sendOffer();
+                alert("共有設定完了！「このタブ」を選択した状態で操作してください。");
+            } catch (err) {
+                console.error(err);
+            }
+        };
 
-        socket.on('candidate', async (candidate) => {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        });
+        async function sendOffer() {
+            if (pc) pc.close();
+            pc = new RTCPeerConnection(config);
+            stream.getTracks().forEach(t => pc.addTrack(t, stream));
+            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', e.candidate); };
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('offer', pc.localDescription);
+        }
+
+        socket.on('viewer-joined', () => { if (stream) sendOffer(); });
+        socket.on('answer', a => pc.setRemoteDescription(new RTCSessionDescription(a)));
+        socket.on('candidate', c => pc.addIceCandidate(new RTCIceCandidate(c)));
     </script>
 </body>
 </html>
