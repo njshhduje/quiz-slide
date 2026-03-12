@@ -1,15 +1,16 @@
 const express = require('express');
-const path = require('path'); // 追加
+const path = require('path');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
-// path.joinを使って絶対パスで指定する（403回避に有効）
-app.use(express.static(path.join(__dirname, 'public')));
+// 静的ファイルの場所を絶対パスで指定（403回避の鍵）
+const publicPath = path.join(__dirname, 'public');
+app.use(express.static(publicPath));
 
-// ルートにアクセスした時にadminへ飛ばす設定（任意）
+// URL直打ち（https://.../）でadminを表示するように設定
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    res.sendFile(path.join(publicPath, 'admin.html'));
 });
 
 io.on('connection', (socket) => {
