@@ -1,58 +1,32 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
     <meta charset="UTF-8">
     <title>Viewer</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* 背景を黒にして、余計な余白をゼロにする */
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: #000; overflow: hidden; 
-            display: flex; justify-content: center; align-items: center; 
-        }
-        /* ビデオは最初非表示。映像が来たら画面いっぱいに */
-        video { 
-            display: none; width: 100vw; height: 100vh; object-fit: contain; 
-        }
-        /* 映像が再生されたら表示する */
-        .is-playing video { display: block; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        video { display: none; width: 100vw; height: 100vh; object-fit: contain; }
+        .active video { display: block; }
     </style>
 </head>
 <body>
-    <video id="remoteVideo" autoplay playsinline muted></video>
-
+    <video id="v" autoplay playsinline muted></video>
     <script>
-        const socket = io({ transports: ['websocket'] });
-        const remoteVideo = document.getElementById('remoteVideo');
-        let peerConnection;
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
+        const socket = io();
+        const v = document.getElementById('v');
+        let pc;
         socket.emit('join-viewer');
-
         socket.on('offer', async (offer) => {
-            if (peerConnection) peerConnection.close();
-            peerConnection = new RTCPeerConnection(config);
-
-            peerConnection.ontrack = (event) => {
-                remoteVideo.srcObject = event.streams[0];
-                remoteVideo.play();
-                document.body.classList.add('is-playing');
-            };
-
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) socket.emit('candidate', event.candidate);
-            };
-
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            socket.emit('answer', peerConnection.localDescription);
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            pc.ontrack = e => { v.srcObject = e.streams[0]; document.body.className = 'active'; };
+            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', e.candidate); };
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('answer', pc.localDescription);
         });
-
-        socket.on('candidate', async (candidate) => {
-            if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        });
+        socket.on('candidate', c => pc && pc.addIceCandidate(new RTCIceCandidate(c)));
     </script>
 </body>
 </html>
