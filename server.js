@@ -1,17 +1,10 @@
 const express = require('express');
-const path = require('path');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
-// 静的ファイルの場所を絶対パスで指定（403回避の鍵）
-const publicPath = path.join(__dirname, 'public');
-app.use(express.static(publicPath));
-
-// URL直打ち（https://.../）でadminを表示するように設定
-app.get('/', (req, res) => {
-    res.sendFile(path.join(publicPath, 'admin.html'));
-});
+// staticファイル（HTMLなど）をpublicフォルダから読み込む設定
+app.use(express.static('public'));
 
 io.on('connection', (socket) => {
     socket.on('join-viewer', () => socket.broadcast.emit('viewer-joined'));
