@@ -1,46 +1,38 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>管理者 - 画面共有</title>
+    <title>Admin</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f2f5; }
-        video { width: 100%; max-width: 600px; border-radius: 8px; background: #000; margin-top: 20px; }
-        button { padding: 12px 24px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        body { font-family: sans-serif; text-align: center; background: #eee; }
+        video { width: 100%; max-width: 500px; background: #000; }
     </style>
 </head>
 <body>
-    <h1>管理者パネル</h1>
-    <button id="startBtn">画面共有を開始する</button>
-    <br>
-    <video id="localVideo" autoplay playsinline muted></video>
-
+    <h1>管理者画面</h1>
+    <button id="btn">画面共有を開始</button>
+    <hr>
+    <video id="v" autoplay playsinline muted></video>
     <script>
         const socket = io();
         let stream, pc;
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
-        document.getElementById('startBtn').onclick = async () => {
+        document.getElementById('btn').onclick = async () => {
             stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-            document.getElementById('localVideo').srcObject = stream;
-            sendOffer();
+            document.getElementById('v').srcObject = stream;
+            send();
         };
-
-        async function sendOffer() {
-            if (pc) pc.close();
-            pc = new RTCPeerConnection(config);
-            stream.getTracks().forEach(track => pc.addTrack(track, stream));
-            pc.onicecandidate = (e) => { if (e.candidate) socket.emit('candidate', e.candidate); };
-            
+        async function send() {
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            stream.getTracks().forEach(t => pc.addTrack(t, stream));
+            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', e.candidate); };
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             socket.emit('offer', pc.localDescription);
         }
-
-        socket.on('viewer-joined', () => { if (stream) sendOffer(); });
-        socket.on('answer', (ans) => pc.setRemoteDescription(new RTCSessionDescription(ans)));
-        socket.on('candidate', (cand) => pc.addIceCandidate(new RTCIceCandidate(cand)));
+        socket.on('viewer-joined', () => stream && send());
+        socket.on('answer', a => pc.setRemoteDescription(new RTCSessionDescription(a)));
+        socket.on('candidate', c => pc.addIceCandidate(new RTCIceCandidate(c)));
     </script>
 </body>
 </html>
