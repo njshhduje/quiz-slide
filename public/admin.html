@@ -1,38 +1,76 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Admin</title>
+    <title>Admin - Auto Re-offer</title>
     <script src="/socket.io/socket.io.js"></script>
-    <style>
-        body { font-family: sans-serif; text-align: center; background: #eee; }
-        video { width: 100%; max-width: 500px; background: #000; }
-    </style>
 </head>
-<body>
-    <h1>管理者画面</h1>
-    <button id="btn">画面共有を開始</button>
-    <hr>
-    <video id="v" autoplay playsinline muted></video>
+<body style="font-family:sans-serif; text-align:center;">
+    <h1>管理者配信パネル</h1>
+    <button id="startBtn" style="padding:10px 20px;">画面共有を開始</button>
+    <p id="count">接続中の閲覧者: 0人</p>
+    <video id="localVideo" autoplay playsinline muted style="width:400px; background:#000;"></video>
+
     <script>
         const socket = io();
-        let stream, pc;
-        document.getElementById('btn').onclick = async () => {
-            stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-            document.getElementById('v').srcObject = stream;
-            send();
+        const peerConnections = {}; 
+        let localStream;
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        document.getElementById('startBtn').onclick = async () => {
+            localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            
+            // 配信開始時に、すでにページを開いて待機していた人たちへOfferを送る
+            socket.emit('join-viewer'); 
         };
-        async function send() {
-            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            stream.getTracks().forEach(t => pc.addTrack(t, stream));
-            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', e.candidate); };
+
+        // 【重要】後から入った閲覧者への自動対応
+        socket.on('viewer-joined', async (viewerId) => {
+            if (!localStream) return; // まだ配信していなければ無視
+
+            console.log("新しい閲覧者が参加しました:", viewerId);
+            
+            // その人専用のコネクションを作成
+            const pc = new RTCPeerConnection(config);
+            peerConnections[viewerId] = pc;
+
+            // 自分の映像トラックをすべて追加
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+            pc.onicecandidate = (e) => {
+                if (e.candidate) socket.emit('candidate', { to: viewerId, candidate: e.candidate });
+            };
+
+            // 新しいOfferを作成して、その閲覧者だけに送る
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            socket.emit('offer', pc.localDescription);
+            socket.emit('offer', { to: viewerId, offer: offer });
+            
+            updateCount();
+        });
+
+        socket.on('answer', async (data) => {
+            const pc = peerConnections[data.from];
+            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        });
+
+        socket.on('candidate', async (data) => {
+            const pc = peerConnections[data.from];
+            if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        });
+
+        socket.on('user-left', (id) => {
+            if (peerConnections[id]) {
+                peerConnections[id].close();
+                delete peerConnections[id];
+                updateCount();
+            }
+        });
+
+        function updateCount() {
+            document.getElementById('count').innerText = `接続中の閲覧者: ${Object.keys(peerConnections).length}人`;
         }
-        socket.on('viewer-joined', () => stream && send());
-        socket.on('answer', a => pc.setRemoteDescription(new RTCSessionDescription(a)));
-        socket.on('candidate', c => pc.addIceCandidate(new RTCIceCandidate(c)));
     </script>
 </body>
 </html>
