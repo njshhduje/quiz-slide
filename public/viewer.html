@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <title>Viewer</title>
@@ -16,17 +16,33 @@
         const socket = io();
         const v = document.getElementById('v');
         let pc;
+
+        // 【重要】開いた瞬間に管理者に通知する
         socket.emit('join-viewer');
-        socket.on('offer', async (offer) => {
+
+        socket.on('offer', async (data) => {
+            console.log("管理者から映像信号を受信しました");
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            pc.ontrack = e => { v.srcObject = e.streams[0]; document.body.className = 'active'; };
-            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', e.candidate); };
-            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            
+            pc.ontrack = (e) => {
+                v.srcObject = e.streams[0];
+                document.body.className = 'active';
+                v.play().catch(err => console.log("再生にユーザー操作が必要な場合があります"));
+            };
+
+            pc.onicecandidate = (e) => {
+                if (e.candidate) socket.emit('candidate', { to: data.from, candidate: e.candidate });
+            };
+
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            socket.emit('answer', pc.localDescription);
+            socket.emit('answer', { to: data.from, answer: answer });
         });
-        socket.on('candidate', c => pc && pc.addIceCandidate(new RTCIceCandidate(c)));
+
+        socket.on('candidate', (data) => {
+            if (pc) pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        });
     </script>
 </body>
 </html>
